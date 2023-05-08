@@ -1,0 +1,428 @@
+### Dataset Source
+### https://www.kaggle.com/datasets/thedevastator/swimming-top-200-world-times-in-each-category
+
+# Import the necessary libraries
+import pandas as pd
+import numpy as np
+
+# read csv file
+swim = pd.read_csv('C:/Users/YingYingChen/Desktop/portfolio/swimming/01_dataset/raw dataset.csv')
+
+
+#########################################################
+# data preparation
+
+# drop the unnecessary columns
+# axis=0 >> rows , axis=1 >> columns 
+swim = swim.drop(['Swim time', 'Team Code', 'Country Code'], axis=1)
+
+# delete the ending str(" LCM Male" or "LCM Female") in "Event description" column
+swim['Event description'] = swim['Event description'].str.replace(' LCM Male', '').str.replace('LCM Female', '')
+swim['Event description'] = swim['Event description'].str.replace('Men ', '').str.replace('Women ', '')
+# remove the space at the end
+swim['Event description'] = swim['Event description'].str.rstrip()
+
+# Print the summary information of the DataFrame
+print(swim.info())
+
+
+# Convert to appropriate data types
+swim['Event Name'] = swim['Event Name'].astype(str)
+swim['Swim date'] = pd.to_datetime(swim['Swim date']).dt.date
+swim['Event description'] = swim['Event description'].astype(str)
+swim['Team Name'] = swim['Team Name'].astype(str)
+swim['Athlete Full Name'] = swim['Athlete Full Name'].astype(str)
+swim['Gender'] = swim['Gender'].astype(str)
+swim['Athlete birth date'] = pd.to_datetime(swim['Athlete birth date']).dt.date
+swim['Rank_Order'] = pd.to_numeric(swim['Rank_Order'])
+swim['City'] = swim['City'].astype(str)
+#swim['Duration (hh:mm:ss:ff)'] = pd.to_timedelta(swim['Duration (hh:mm:ss:ff)'].str.replace('.', ':'))
+## cannot sucessfully convert the Duration to correct datatype
+
+#rename column name
+swim = swim.rename(columns={'Duration (hh:mm:ss:ff)': 'Swim time'})
+
+# Check if there is any NA value
+swim.isna().any()
+
+# Check if there is any NaN value
+swim.isnull().any()
+
+# Check if there is any multiple row
+swim.duplicated().sum()
+# 0
+
+# Check if each unique Event Name has 200 unique Rank_Order
+event_des_group = swim.groupby('Event description')['Rank_Order'].nunique()
+print(event_des_group[event_des_group != 200])
+# looks normal
+
+
+# save csv
+swim.to_csv('C:/Users/YingYingChen/Desktop/portfolio/swimming/01_dataset/preparation_data.csv', index=False)
+
+
+#########################################################
+# KPIs calculation (KPI1-3)
+
+# Import the necessary libraries
+import pandas as pd
+from datetime import datetime
+
+# read csv file
+swim = pd.read_csv('C:/Users/YingYingChen/Desktop/portfolio/swimming/01_dataset/preparation_data.csv')
+
+print(swim.info())
+
+# unique_Athlete number in Top 200
+unique_Athlete_M = swim[swim['Gender'] == 'M']['Athlete Full Name'].unique()
+#307
+unique_Athlete_F = swim[swim['Gender'] == 'F']['Athlete Full Name'].unique()
+#409
+
+### KPI 1
+# How many swimmers can make it to the top 200 in each swimming event?
+uniAthlete_for_uniEventDes_M = swim[swim['Gender'] == 'M'].groupby('Event description')['Athlete Full Name'].nunique().reset_index(name='uni_M_Athlete_num')
+print(uniAthlete_for_uniEventDes_M.head())
+uniAthlete_for_uniEventDes_F = swim[swim['Gender'] == 'F'].groupby('Event description')['Athlete Full Name'].nunique().reset_index(name='uni_F_Athlete_num')
+print(uniAthlete_for_uniEventDes_F.head())
+
+# merge two df
+uniAthlete_for_uniEventDes = pd.merge(uniAthlete_for_uniEventDes_M, uniAthlete_for_uniEventDes_F, on='Event description', how='outer')
+print(uniAthlete_for_uniEventDes.head())
+
+
+
+### KPI 2
+# What is the distribution of team (nationalities) among the top 200 swimmers?
+uniAthlete_for_uniTeam_MF = swim.groupby('Team Name')['Athlete Full Name'].nunique().reset_index(name='uni_M&F_Athlete_num')
+print(uniAthlete_for_uniTeam_MF.head())
+
+uniAthlete_for_uniTeam_M = swim[swim['Gender'] == 'M'].groupby('Team Name')['Athlete Full Name'].nunique().reset_index(name='uni_M_Athlete_num')
+print(uniAthlete_for_uniTeam_M.head())
+
+uniAthlete_for_uniTeam_F = swim[swim['Gender'] == 'F'].groupby('Team Name')['Athlete Full Name'].nunique().reset_index(name='uni_F_Athlete_num')
+print(uniAthlete_for_uniTeam_F.head())
+
+# merge three df
+uniAthlete_for_uniTeam = pd.merge(uniAthlete_for_uniTeam_M, uniAthlete_for_uniTeam_F, on='Team Name', how='outer')
+uniAthlete_for_uniTeam = pd.merge(uniAthlete_for_uniTeam, uniAthlete_for_uniTeam_MF, on='Team Name', how='outer')
+uniAthlete_for_uniTeam = uniAthlete_for_uniTeam.sort_values(by='uni_M&F_Athlete_num', ascending=False)
+print(uniAthlete_for_uniTeam.head())
+
+
+### KPI 3
+# Distribution of star signs among the top 200 swimmers.
+star_sign_dict = {
+    'Aries': range(321, 420),
+    'Taurus': range(420, 521),
+    'Gemini': range(521, 622),
+    'Cancer': range(622, 723),
+    'Leo': range(723, 823),
+    'Virgo': range(823, 923),
+    'Libra': range(923, 1024),
+    'Scorpio': range(1024, 1122),
+    'Sagittarius': range(1122, 1221),
+    'Capricorn': list(range(1222, 1232)) + list(range(101, 121)),
+    'Aquarius': range(121, 220),
+    'Pisces': range(220, 321)
+}
+
+def get_star_sign(birth_date):
+    birth_date_obj = datetime.strptime(birth_date, '%Y-%m-%d')
+    month_day_str = birth_date_obj.strftime('%m%d')
+    for sign, date_range in star_sign_dict.items():
+        if int(month_day_str) in date_range:
+            return sign
+        
+# add "star sign" column in a new df "swim_sign"
+swim_sign = swim.copy()
+swim_sign['star sign'] = swim_sign['Athlete birth date'].apply(get_star_sign)
+print(swim_sign.head())
+
+# start caculate KPI
+male_data = swim_sign[swim_sign['Gender'] == 'M']
+swim_sign_M = male_data.copy()
+star_for_uniAthlete_M = swim_sign_M.groupby(['star sign'])['Athlete Full Name'].nunique().reset_index(name='unique_male_names_count')
+print(star_for_uniAthlete_M.head())
+
+
+female_data = swim_sign[swim_sign['Gender'] == 'F']
+swim_sign_F = female_data.copy()
+star_for_uniAthlete_F = swim_sign_F.groupby(['star sign'])['Athlete Full Name'].nunique().reset_index(name='unique_female_names_count')
+print(star_for_uniAthlete_F.head())
+
+# Merge male and female data frames by star sign
+star_for_uniAthlete_MF = pd.merge(star_for_uniAthlete_M, star_for_uniAthlete_F, on='star sign', how='outer')
+
+# Add a new column with the sum of unique male and female names
+star_for_uniAthlete_MF['unique_MF_names_count'] = star_for_uniAthlete_MF.apply(lambda row: row['unique_male_names_count'] + row['unique_female_names_count'], axis=1)
+
+# Print the merged data frame
+print(star_for_uniAthlete_MF.head())
+
+
+#########################################################
+# KPIs calculation (KPI4-10)
+
+
+# Import the necessary libraries
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+
+# read csv file
+swim = pd.read_csv('C:/Users/YingYingChen/Desktop/portfolio/swimming/01_dataset/preparation_data.csv')
+
+print(swim.info())
+
+
+### KPI 4
+# Distribution by year in top 200
+# bias- the old record would be replaced by the new ones
+
+swim["Swim date"] = pd.to_datetime(swim["Swim date"])
+swim["year"] = swim["Swim date"].dt.year
+count_NR_by_year = swim.groupby("year").size().reset_index(name="count_NR_MF")
+# size()to calculate the rows by each category
+
+# M
+count_NR_by_year_M = swim[swim["Gender"] == "M"].groupby("year").size().reset_index(name="count_NR_M")
+
+# F
+count_NR_by_year_F = swim[swim["Gender"] == "F"].groupby("year").size().reset_index(name="count_NR_F")
+
+# merge three df
+count_NR_by_year = pd.merge(count_NR_by_year, count_NR_by_year_M, on='year', how='outer')
+count_NR_by_year = pd.merge(count_NR_by_year, count_NR_by_year_F, on='year', how='outer')
+
+# visualize
+# set the image size
+plt.figure(figsize=(10, 6))
+
+# plot
+plt.bar(count_NR_by_year["year"], count_NR_by_year["count_NR_MF"])
+
+plt.title("Distribution of Top 200 Swims by Year")
+plt.xlabel("Year")
+plt.ylabel("Number of Swims")
+
+plt.show()
+
+
+### KPI 5
+# Distribution by game city in top 200
+
+unique_city = swim['City'].unique()
+print(unique_city)
+
+count_NR_by_city_M = swim[swim["Gender"] == "M"].groupby("City").size().reset_index(name="count_NR_M")
+count_NR_by_city_F = swim[swim["Gender"] == "F"].groupby("City").size().reset_index(name="count_NR_F")
+count_NR_by_city_MF = swim.groupby("City").size().reset_index(name="count_NR_MF")
+
+# merge three df
+count_NR_by_city = pd.merge(count_NR_by_city_M, count_NR_by_city_F, on='City', how='outer')
+count_NR_by_city = pd.merge(count_NR_by_city, count_NR_by_city_MF, on='City', how='outer')
+
+
+### KPI 6
+# Distribution by Event in top 200
+
+# list and count all the Event Names among the records
+unique_event = swim.groupby("Event Name").size().reset_index(name="count_NR")
+print(unique_event)
+
+# main event types > 
+# Olympic Games
+# FINA - (FINA World Championships & FINA Swimming World Cup...)
+# US National Championships
+# US Olympic Team Trials
+# European Championships
+# Chinese National Championships
+# Pan Pacific Championships
+# Australian National Championships
+# Phillips 66
+# Russian National Championships
+# Italian National Championships
+# Japan National Championships
+# Commonwealth Games
+# French National Championships
+# Hancock Prospecting Australian Swimming Trails
+# Asian Games
+
+
+# Categorical the Event Names
+
+def categorize_event(event_name):
+    if "Olympic Games" in event_name:
+        return "Olympic Games"
+    elif "FINA" in event_name:
+        return "FINA"
+    elif "US National Championships" in event_name:
+        return "US National Championships"
+    elif "US Olympic Team Trials" in event_name:
+        return "US Olympic Team Trials"
+    elif "European Championships" in event_name:
+        return "European Championships"
+    elif "Chinese National Championships" in event_name:
+        return "Chinese National Championships"
+    elif "Pan Pacific Championships" in event_name:
+        return "Pan Pacific Championships"
+    elif "Australian National Championships" in event_name:
+        return "Australian National Championships"
+    elif "Phillips 66" in event_name:
+        return "Phillips 66"
+    elif "Russian National Championships" in event_name:
+        return "Russian National Championships"
+    elif "Italian National Championships" in event_name:
+        return "Italian National Championships"
+    elif "Japan National Championships" in event_name:
+        return "Japan National Championships"
+    elif "Commonwealth Games" in event_name:
+        return "Commonwealth Games"
+    elif "French National Championships" in event_name:
+        return "French National Championships"
+    elif "Hancock Prospecting Australian Swimming Trails" in event_name:
+        return "Hancock Prospecting Australian Swimming Trails"
+    elif "Asian Games" in event_name:
+        return "Asian Games"
+    else:
+        return "Others"
+    
+swim["Categorical Event"] = swim["Event Name"].apply(categorize_event)
+
+# group by Categorical Event
+
+NR_from_CategoricalEvent = swim.groupby("Categorical Event").size().reset_index(name="count_NR")
+NR_from_CategoricalEvent = NR_from_CategoricalEvent[NR_from_CategoricalEvent["Categorical Event"] != "Others"]
+
+
+
+### KPI 7
+# Distribution of the number of swimmers of different strokes who entered the top 200 in 2019, 2020, and 2021.
+
+swim["Swim date"] = pd.to_datetime(swim["Swim date"])
+swim["year"] = swim["Swim date"].dt.strftime("%Y")
+# cannot use : swim["year"] = swim["Swim date"].dt.year , need to convert from integer to str for futher sort
+count_NR_by_Eventdiscription_2021 = swim[swim["year"] == "2021"].groupby("Event description").size().reset_index(name="count_NR_Ed_2021")
+# size() to calculate the rows by each category
+
+count_NR_by_Eventdiscription_2020 = swim[swim["year"] == "2020"].groupby("Event description").size().reset_index(name="count_NR_Ed_2020")
+count_NR_by_Eventdiscription_2019 = swim[swim["year"] == "2019"].groupby("Event description").size().reset_index(name="count_NR_Ed_2019")
+
+
+### KPI 8
+# Age distribution of athletes in top 200.
+
+# calculate the age of swimmer 
+swim["Swim date"] = pd.to_datetime(swim["Swim date"])
+swim["Athlete birth date"] = pd.to_datetime(swim["Athlete birth date"])
+swim["age"] = (swim["Swim date"] - swim["Athlete birth date"]).apply(lambda x: x.days // 365)
+# Round down to the nearest integer (無條件捨去) > lambda x: x.days // 365
+# Round to the nearest integer (四捨五入) > lambda x: round(x.days / 365
+
+count_NR_age = swim.groupby("age").size().reset_index(name="count_NR_MF")
+count_NR_age_M = swim[swim["Gender"] == "M"].groupby("age").size().reset_index(name="count_NR_M")
+count_NR_age_F = swim[swim["Gender"] == "F"].groupby("age").size().reset_index(name="count_NR_F")
+
+# merge three df
+count_NR_age = pd.merge(count_NR_age, count_NR_age_M, on='age', how='outer')
+count_NR_age = pd.merge(count_NR_age, count_NR_age_F, on='age', how='outer')
+
+
+
+### KPI 9
+# What's the ratio of the swim pace between the first and the 200th place?
+
+#seperate the Swimming Style and Distance from "Event description"
+swim[['Distance', 'Swimming Style']] = swim['Event description'].str.split(' ', 1, expand=True)
+# str.split(' ', 1, expand=True) >> 
+# ' ': split by the blank
+#  1 : split 1 time only
+# expand=True : split to diff columns and join to the df
+
+
+# check if the datatype is "datetime"
+print(swim['Swim time'].dtype) #object
+# convert the datatype
+swim['Swim time'] = pd.to_datetime(swim['Swim time'], format='%H:%M:%S:%f')
+
+# extract time part only
+swim['Swim time_sec'] = swim['Swim time'].dt.strftime('%H:%M:%S.%f')
+
+# convert Swim time unit to sec
+swim['Swim time_sec'] = pd.to_timedelta(swim['Swim time_sec']).dt.total_seconds()
+
+# check the datatype of Distance
+print(swim['Distance'].dtype) #object
+
+# convert to numeric
+swim['Distance'] = pd.to_numeric(swim['Distance'])
+
+# Calculate Swim pace
+swim['Swim Pace'] = swim['Distance']/ swim['Swim time_sec'] 
+
+
+# extract Rank Order=1 and Rank Order=200
+first_place = swim[swim['Rank_Order'] == 1]
+last_place = swim[swim['Rank_Order'] == 200]
+
+# group by 'Event description' and 'Gender', show the Swim Pace
+first_place_pace = first_place.groupby(['Event description','Gender'])['Swim Pace'].min()
+last_place_pace = last_place.groupby(['Event description', 'Gender'])['Swim Pace'].min()
+
+
+# Calculate the ratio diff between the Swim Pace of the 1 and 200 place.
+pace_ratio = first_place_pace /  last_place_pace
+
+# e.g., pace_ratio =1.05, first_place_pace = last_place_pace *1.05
+# M, the biggest diff -> 200 Butterfly (1.03997)
+# M, the smallest diff -> 200 Breaststroke (1.0185), most competitive
+# F, the biggest diff -> 100 Freestyle (1.0557)
+# F, the smallest diff -> 200 Freestyle (1.02514), most competitive
+
+
+
+### KPI 10
+# Athlete has more than 1 record
+
+# KPI 10-1 
+# Distribution of the number of swimmers ranked in the top 200 
+
+Record_Count = swim.groupby('Athlete Full Name').size().reset_index(name='Record Count')
+swim = pd.merge(swim, Record_Count, on='Athlete Full Name', how='left')
+
+
+# create "Record_Count_Group" column
+Record_Count['Record_Count_Group'] = pd.cut(Record_Count['Record Count'], 
+                                            bins=[0, 10, 20, 30, 40, 50, 60, 80, 90, 100, np.inf], 
+                                            labels=['1-10', '11-20', '21-30', '31-40', '41-50', '51-60', '61-80', '81-90', '91-100', '100+']
+                                            )
+
+
+# base on "Athlete Full Name" ，caculate the freq of each group
+Record_Count_freq = Record_Count.groupby('Record_Count_Group').size().reset_index(name='Record_Count_freq')
+
+
+# M
+male_Record_Count = swim[swim['Gender'] == 'M'].groupby(['Athlete Full Name', 'Gender']).size().reset_index(name='Record Count')
+male_Record_Count['Record_Count_Group'] = pd.cut(male_Record_Count['Record Count'], 
+                                                     bins=[0, 10, 20, 30, 40, 50, 60, 80, 90, 100, np.inf], 
+                                                     labels=['1-10', '11-20', '21-30', '31-40', '41-50', '51-60', '61-80', '81-90', '91-100', '100+'])
+
+M_Record_Count_freq = male_Record_Count.groupby('Record_Count_Group').size().reset_index(name='M_Record_Count_freq')
+
+
+# F
+female_Record_Count = swim[swim['Gender'] == 'F'].groupby(['Athlete Full Name', 'Gender']).size().reset_index(name='Record Count')
+female_Record_Count['Record_Count_Group'] = pd.cut(female_Record_Count['Record Count'], 
+                                                       bins=[0, 10, 20, 30, 40, 50, 60, 80, 90, 100, np.inf], 
+                                                       labels=['1-10', '11-20', '21-30', '31-40', '41-50', '51-60', '61-80', '81-90', '91-100', '100+'])
+
+F_Record_Count_freq = female_Record_Count.groupby('Record_Count_Group').size().reset_index(name='F_Record_Count_freq')
+
+
+# merge three df
+Record_Count_freq = pd.merge(Record_Count_freq, M_Record_Count_freq, on='Record_Count_Group', how='outer')
+Record_Count_freq = pd.merge(Record_Count_freq, F_Record_Count_freq, on='Record_Count_Group', how='outer')
+
