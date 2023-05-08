@@ -1,0 +1,293 @@
+### Dataset Sources
+### https://archive.ics.uci.edu/ml/machine-learning-databases/secom/secom.data
+
+################
+# Data Preparation
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.model_selection import StratifiedShuffleSplit
+
+
+### import df & add column names
+secom = pd.read_csv("https://archive.ics.uci.edu/ml/machine-learning-databases/secom/secom.data", sep=" ")
+secom.columns = [f"feature{i}" for i in range(1, 591)]
+secom_label = pd.read_csv("https://archive.ics.uci.edu/ml/machine-learning-databases/secom/secom_labels.data", sep=" ")
+secom_label.columns = ["result","time"]
+
+
+### merging data
+secom_all= secom.merge(secom_label, left_index=True, right_index= True)
+
+### descriptive analysis on "secom" features
+### calculate summary statistics for each column
+summary_data= secom_all.iloc[:,:-2]
+summary_df= pd.concat([summary_data.count().rename("count"),
+                       summary_data.max().rename("max"),
+                       summary_data.min().rename("min"),
+                       summary_data.mean().rename("mean"),
+                       summary_data.quantile(.25).rename("Q1"),
+                       summary_data.quantile(.50).rename("Q2"),
+                       summary_data.quantile(.75).rename("Q3"),
+                       summary_data.std().rename("standard deviation"),
+                       summary_data.var().rename("Variance"),
+                       summary_data.isna().sum().rename("total_NA"),
+                       (summary_data.isna().sum()/summary_data.count()).rename("%_NA")],axis=1)
+
+
+### distribution of result
+result_counts = secom_all['result'].value_counts(normalize=True) * 100
+print(result_counts) # -1: 93.358876 % , # 1: 6.641124%
+
+plt.bar(result_counts.index, result_counts.values, color= "green")
+plt.xticks(result_counts.index)
+plt.xlabel('Result')
+plt.ylabel('Count')
+plt.title('Distribution of Result')
+
+for i, v in enumerate(result_counts.values):
+    plt.text(i, v, f'{v:.1f}%', ha='center', va='bottom', fontweight='bold')
+
+# Set y-axis limits
+plt.ylim(0, 100)
+
+plt.show()
+
+
+
+### split into training & test data set
+
+# Stratified Sampling
+target = 'result'
+features = secom_all.columns.drop(target)
+
+# Create a StratifiedShuffleSplit object with 1 split and a test size of 20%
+split = StratifiedShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
+
+# Split the data using the StratifiedShuffleSplit object
+for train_index, test_index in split.split(secom_all, secom_all[target]):
+    train_set = secom_all.loc[train_index]
+    test_set = secom_all.loc[test_index]
+    
+
+# Check the distribution of the target variable in the train set
+train_set[target].value_counts(normalize=True)
+#-1    0.933706
+# 1    0.066294
+
+
+# Get the distribution of 'result' in training set
+train_result_counts = train_set['result'].value_counts(normalize=True) * 100
+print(train_result_counts)
+
+# Plot the bar chart
+plt.bar(train_result_counts.index, train_result_counts.values, color='green')
+plt.xticks(train_result_counts.index)
+plt.xlabel('Result')
+plt.ylabel('Percentage')
+plt.title('Distribution of Result in Training Set')
+
+# Add text labels
+for i, v in enumerate(train_result_counts.values):
+    plt.text(i, v, f'{v:.1f}%', ha='center', va='bottom', fontweight='bold')
+
+# Set y-axis limits
+plt.ylim(0, 100)
+
+plt.show()
+
+
+
+
+# Check the distribution of the target variable in the test set
+test_set[target].value_counts(normalize=True)
+#-1    0.933121
+# 1    0.066879
+
+
+# Get the distribution of 'result' in training set
+test_result_counts = test_set['result'].value_counts(normalize=True) * 100
+print(test_result_counts)
+
+# Plot the bar chart
+plt.bar(test_result_counts.index, test_result_counts.values, color='green')
+plt.xticks(test_result_counts.index)
+plt.xlabel('Result')
+plt.ylabel('Percentage')
+plt.title('Distribution of Result in Test Set')
+
+# Add text labels
+for i, v in enumerate(test_result_counts.values):
+    plt.text(i, v, f'{v:.1f}%', ha='center', va='bottom', fontweight='bold')
+
+# Set y-axis limits
+plt.ylim(0, 100)
+
+plt.show()
+
+
+
+
+### put test set away and analysis on training_set
+
+### descriptive analysis on "secom" features
+### calculate summary statistics for each column
+train_summary_data= train_set.iloc[:,:-2]
+train_summary_df= pd.concat([train_summary_data.count().rename("count"),
+                       train_summary_data.max().rename("max"),
+                       train_summary_data.min().rename("min"),
+                       train_summary_data.mean().rename("mean"),
+                       train_summary_data.quantile(.25).rename("Q1"),
+                       train_summary_data.quantile(.50).rename("Q2"),
+                       train_summary_data.quantile(.75).rename("Q3"),
+                       train_summary_data.std().rename("standard deviation"),
+                       train_summary_data.var().rename("Variance"),
+                       train_summary_data.isna().sum().rename("total_NA"),
+                       (train_summary_data.isna().sum()/train_summary_data.count()).rename("%_NA")],axis=1)
+
+
+
+### constant features detection (var=0)
+# calculate variance of each feature
+feature_var = train_summary_data.var()
+feature_var_df = pd.DataFrame(feature_var, columns=['variance'])
+
+# plot
+plt.hist(feature_var_df['variance'], bins=50, color="green")
+plt.xlabel('Variance')
+plt.ylabel('Frequency')
+plt.title('Distribution of Feature Variances')
+plt.show()
+
+# count the numbers of var =0
+feature_var_df[feature_var_df['variance']==0].value_counts()
+# 116 constant features
+
+# list of constant features
+zero_var_features = feature_var_df.index[feature_var_df['variance'] == 0].tolist()
+print(zero_var_features)
+
+
+
+### duplicated features detection
+## Duplicate rows
+duplicates_rows = train_summary_data.duplicated()
+print(duplicates_rows.sum()) # 0
+
+
+## Duplicate columns
+duplicates_cols = train_summary_data.transpose().duplicated()
+print(duplicates_cols.sum()) #104
+duplicated_cols = duplicates_cols[duplicates_cols].index.tolist()
+print(duplicated_cols)
+
+
+
+
+
+
+### outliers detection
+
+mean = train_summary_df["mean"]
+std = train_summary_df["standard deviation"]
+
+# calculate
+influencial_observations = ((train_summary_data > (mean + 2*std)) | (train_summary_data < (mean - 2*std))).sum()/ len(train_summary_data)
+plt.hist(influencial_observations,color="green")
+plt.title("Influencial observation")
+plt.xlabel("proportion of nfluencial observations")
+plt.ylabel("frequency")
+plt.show()
+
+outliers= ((train_summary_data > (mean + 3*std)) | (train_summary_data < (mean - 3*std))).sum()/ len(train_summary_data)
+plt.hist(outliers,color="green")
+plt.title("Outliers")
+plt.xlabel("proportion of outliers")
+plt.ylabel("frequency")
+plt.show()
+
+max(outliers)
+#0.048722044728434506
+
+
+
+
+
+
+## NA by columns
+
+na_column_percentage = train_summary_data.isna().sum() /len(train_summary_data)
+
+print(na_column_percentage.describe()) # min=0, max=0.905751
+
+
+na_bins = [0] + list(np.arange(0.1, 1.1, 0.1))
+na_labels = [f'{i:.1f} < na_column_percentage <= {j:.1f}' for i, j in zip(na_bins[:-1], na_bins[1:])]
+na_counts = [(na_column_percentage.between(i, j)).sum() for i, j in zip(na_bins[:-1], na_bins[1:])]
+
+
+na_per = pd.DataFrame({'na_column_percentage': na_counts},
+                  index=['0', '0.1-0.2', '0.2-0.3', '0.3-0.4', '0.4-0.5', 
+                         '0.5-0.6', '0.6-0.7', '0.7-0.8', '0.8-0.9', '0.9-1.0'])
+
+na_column_percentage.hist(bins=20,color ="green")
+plt.show()
+
+# list the features which na > 0.5
+high_na_cols = na_column_percentage[na_column_percentage > 0.5].index
+print(high_na_cols)
+
+## NA by rows
+
+na_row_percentage = train_summary_data.isna().mean(axis=1)
+
+print(na_row_percentage)
+print(na_row_percentage.describe())
+# max= 0.257627
+
+
+
+
+
+
+###
+# calculate pearson correlation matrix
+corr = train_summary_data.corr(method='pearson')
+
+# plot heatmap
+sns.heatmap(corr, cmap='coolwarm')
+
+# calculate percentage of each correlation category
+total_corr = corr.shape[0] * (corr.shape[0] - 1) / 2
+
+no_corr = (np.abs(corr) < 0.3).sum().sum() / 2 / total_corr * 100
+weak_corr = ((np.abs(corr) >= 0.3) & (np.abs(corr) < 0.5)).sum().sum() / 2 / total_corr * 100
+moderate_corr = ((np.abs(corr) >= 0.5) & (np.abs(corr) < 0.8)).sum().sum() / 2 / total_corr * 100
+strong_corr = ((np.abs(corr) >= 0.8) & (np.abs(corr) < 1)).sum().sum() / 2 / total_corr * 100
+absolute_corr = (np.abs(corr) == 1).sum().sum() / 2 / total_corr * 100
+
+# Create a list of the values
+values = [no_corr, weak_corr, moderate_corr, strong_corr, absolute_corr]
+
+# Create a list of the labels
+labels = ['No_Corr', 'Weak_Corr', 'Moderate_Corr', 'Strong_Corr', 'Absolute_Corr']
+
+# Create a bar chart
+plt.bar(labels, values,color="green")
+
+# Add percentage labels on bars
+for i in range(len(values)):
+    plt.text(i, values[i]+0.5, '{:.2f}%'.format(values[i]), ha='center', va='bottom', fontweight='bold')
+
+
+# Set the title and y-axis label
+plt.title('Correlation')
+plt.ylabel('Count of Features(%)')
+
+# Rotate x-axis labels
+plt.xticks(rotation=45)
+
+# Display the plot
+plt.show()
