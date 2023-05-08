@@ -1,0 +1,265 @@
+import tensorflow as tf
+import segmentation_models as sm
+import glob
+import cv2
+import numpy as np
+from matplotlib import pyplot as plt
+from skimage.transform import AffineTransform, warp
+from skimage import io, img_as_ubyte
+import random
+import os
+from scipy.ndimage import rotate
+
+import albumentations as A
+images_to_generate=1000
+
+
+########################################
+# Images Augmentation
+
+images_path= 'C:/Users/YingYingChen/Desktop/dida_task/train/images/' #path to original images
+labels_path = 'C:/Users/YingYingChen/Desktop/dida_task/train/labels/'
+img_augmented_path= 'C:/Users/YingYingChen/Desktop/dida_task/augmented_train/aug_img/' # path to store aumented images
+lab_augmented_path= 'C:/Users/YingYingChen/Desktop/dida_task/augmented_train/aug_label/' # path to store aumented label
+
+images=[] # to store paths of images from folder
+labels=[]
+
+for im in os.listdir(images_path):  # read image name from folder and append its path into "images" array     
+    images.append(os.path.join(images_path,im))
+
+for lab in os.listdir(labels_path):  # read image name from folder and append its path into "labels" array     
+    labels.append(os.path.join(labels_path,lab))
+
+aug = A.Compose([
+    A.VerticalFlip(p=0.5),              
+    A.RandomRotate90(p=0.5),
+    A.HorizontalFlip(p=1),
+    A.Transpose(p=1),
+    #A.ElasticTransform(p=1, alpha=120, sigma=120 * 0.05, alpha_affine=120 * 0.03),
+    A.GridDistortion(p=1)
+    ]
+)
+
+
+#random.seed(42)
+
+i=1   # variable to iterate till images_to_generate
+
+
+while i<=images_to_generate: 
+    number = random.randint(0, len(images)-1)  #Pick a number to select an image & label
+    image_path = images[number]
+    label_path = labels[number]
+    print(image_path, label_path)
+    
+    # Read image and label
+    image = io.imread(image_path)
+    label = io.imread(label_path)
+    
+    # Apply augmentations to image and label
+    augmented = aug(image=image, mask=label)
+    transformed_image = augmented['image']
+    transformed_label = augmented['mask']
+    
+    # Save augmented image and label
+    new_image_path = os.path.join(img_augmented_path, 'augmented_image_{}.png'.format(i))
+    new_label_path = os.path.join(lab_augmented_path, 'augmented_label_{}.png'.format(i))
+    io.imsave(new_image_path, transformed_image)
+    io.imsave(new_label_path, transformed_label)
+    
+    i += 1
+    
+   
+   
+################################
+# transfer to google colab to utilize GPU
+    
+!pip install segmentation_models
+import tensorflow as tf
+import segmentation_models as sm
+import glob
+import cv2 # open cv, read images
+import numpy as np # manipulate arrays
+from matplotlib import pyplot as plt # plotting
+import os # walk through the directory, get the directory names right
+import random
+import albumentations as A
+import numpy as np
+import tifffile as tiff
+    
+from google.colab import drive
+drive.mount('/content/drive')
+
+
+image_names = glob.glob("/content/drive/My Drive/dida_task/augmented_train/aug_img/*.png")
+image_names.sort()
+#image_names_subset = image_names[0:num_images]
+
+
+### The training set is imported and sorted to ensure that the order of images and labels matches.
+#print(image_names)
+
+images = [cv2.imread(image, 1) for image in image_names]
+train_images = np.array(images)
+
+train_images.shape
+#(1000, 256, 256, 3)
+
+label_names = glob.glob("/content/drive/My Drive/dida_task/augmented_train/aug_label/*.png")
+label_names.sort()
+#label_names_subset = label_names[0:num_images]
+
+#print(label_names)
+
+labels = [cv2.imread(label, 0) for label in label_names]
+train_labels = np.array(labels)
+
+train_labels.shape
+# (1000, 256, 256)
+
+#Sanity check, view few mages
+img_number = random.randint(0, len(train_images)-1)
+img = train_images[img_number]
+label = train_labels[img_number]
+plt.figure(figsize=(12, 8))
+plt.subplot(221)
+plt.title('Image')
+plt.imshow(img)
+plt.subplot(222)
+plt.title('Label')
+plt.imshow(label)
+plt.show()
+
+
+# Building
+# HEX: #ffffff
+# RGB (255,255,255)
+# Background 
+# HEX: #000000
+# RGB (0,0,0)
+# convert to categorical segmentation
+
+# The colors in the labels are converted to categorical pixels to facilitate image segmentation.
+
+from keras.utils import to_categorical
+# map label pixel values to class indices (0 or 1)
+train_labels[train_labels > 0] = 1 # background
+train_labels[train_labels == 255] = 0 # building
+# convert class indices to one-hot encoded labels
+num_classes = 2
+train_labels_categorical = to_categorical(train_labels, num_classes)
+
+# Use the “resnet34”, preprocesses the input, and splits the training set into training and validation set
+BACKBONE = 'resnet34'
+preprocess_input = sm.get_preprocessing(BACKBONE)
+#Use customary x_train and y_train variables
+X = train_images
+Y = train_labels
+from sklearn.model_selection import train_test_split
+x_train, x_val, y_train, y_val = train_test_split(X, Y, test_size=0.2, random_state=42
+# preprocess input
+x_train = preprocess_input(x_train)
+x_val = preprocess_input(x_val)
+
+# preprocess input and convert data type
+x_train = preprocess_input(x_train).astype('float32')
+x_val = preprocess_input(x_val).astype('float32')
+y_train = y_train.astype('float32')
+y_val = y_val.astype('float32')
+
+
+
+###### Model building
+# define model
+model = sm.Unet(BACKBONE, encoder_weights='imagenet')
+model.compile('Adam', loss=sm.losses.bce_jaccard_loss, metrics=[sm.metrics.iou_score])
+print(model.summary())
+
+###### Model training
+# fit model
+dida_model = model.fit(
+ x_train,
+ y_train,
+ batch_size=8,
+ epochs=100,
+ verbose=1,
+ validation_data=(x_val, y_val))
+
+
+#After training for 100 epochs, the results show a low training loss, a low validation loss, and high IoU scores for both the training and validation sets, indicating that the model performs well on both sets.
+
+model.save('/content/drive/My Drive/dida_task/augmented_train/dida_model.h5')
+
+#plot the training and validation IoU and loss at each epoch
+loss = dida_model.history['loss']
+val_loss = dida_model.history['val_loss']
+epochs = range(1, len(loss) + 1)
+plt.plot(epochs, loss, 'y', label='Training loss')
+plt.plot(epochs, val_loss, 'r', label='Validation loss')
+plt.title('Training and validation loss')
+plt.xlabel('Epochs')
+plt.ylabel('Loss')
+plt.legend()
+plt.show()
+acc = dida_model.history['iou_score']
+val_acc = dida_model.history['val_iou_score']
+plt.plot(epochs, acc, 'y', label='Training IoU')
+plt.plot(epochs, val_acc, 'r', label='Validation IoU')
+plt.title('Training and validation IoU')
+plt.xlabel('Epochs')
+plt.ylabel('IoU')
+plt.legend()
+plt.show()
+
+
+###### Test set prediction
+
+#Test on a different image
+#READ EXTERNAL IMAGE...
+test_img = cv2.imread('/content/drive/My Drive/dida_task/test/images/278.png', cv2.IMREAD_COLOR)
+test_img = cv2.resize(test_img, (256, 256))
+test_img = cv2.cvtColor(test_img, cv2.COLOR_RGB2BGR)
+plt.imshow(test_img, cmap='gray')
+test_img = np.expand_dims(test_img, axis=0)
+prediction = model.predict(test_img)
+
+
+#View and Save segmented image
+prediction_image = prediction.reshape(label.shape)
+plt.imshow(prediction_image, cmap='gray')
+plt.imsave('/content/drive/My Drive/dida_task/test/labels/278.jpg', prediction_image, cmap='gray')
+
+
+
+#Test on a different image
+#READ EXTERNAL IMAGE...
+test_img = cv2.imread('/content/drive/My Drive/dida_task/test/images/535.png', cv2.IMREAD_COLOR)       
+test_img = cv2.resize(test_img, (256, 256))
+test_img = cv2.cvtColor(test_img, cv2.COLOR_RGB2BGR)
+plt.imshow(test_img, cmap='gray')
+test_img = np.expand_dims(test_img, axis=0)
+
+prediction = model.predict(test_img)
+
+
+#View and Save segmented image
+prediction_image = prediction.reshape(label.shape)
+plt.imshow(prediction_image, cmap='gray')
+plt.imsave('/content/drive/My Drive/dida_task/test/labels/535.jpg', prediction_image, cmap='gray')
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
