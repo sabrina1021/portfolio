@@ -1,5 +1,5 @@
 # portfolio
-This portfolio contains three projects, which are described in detail in the "Read me" file.
+This portfolio contains three projects as following,
 
 1. Analysis of the top 200 swimmers in the world in various strokes and their results (data cleaning, calculation and analysis of 10 KPIs)
 
