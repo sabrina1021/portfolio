@@ -1,5 +1,4 @@
 # Sabrina_ Portfolio
-This portfolio contains three projects as following,
 
 # Project 1: SECOM Analytics & Machine Learning (Ongoing)
  ● Implemented data mining of the semiconductor industry dataset (SECOM) with 590 features. 
