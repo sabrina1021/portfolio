@@ -8,6 +8,7 @@
 
 
  
+ 
 # [Project 2: Neural Network Image Processing Project](https://github.com/sasa1021/portfolio/blob/main/Neural%20Network%20Image%20Processing%20Project)
 - Utilized Albumentations to address limited data
 - converted color labels tocategorical pixels for image segmentation, and used a "ResNet34" preprocessed input
@@ -33,13 +34,20 @@
 ![](https://github.com/sasa1021/portfolio/blob/main/images/539.jpg)
 
 
+
+
 # [Project 3: World Top 200 Swimmer Analytics project](https://github.com/sasa1021/portfolio/blob/main/World%20Top%20200%20swimmer%20project)
 - Defined 10 KPIs based on the correlation between various variables
 - Preprocessed, Calculated, Visualized and analyzed performance data of the top 200 swimmers worldwide across various strokes and distances in international competitions  
 since the 1980s
 
 
-
-
+# [Project 4: OBETA Warehousing Analytics Project](https://github.com/sasa1021/portfolio/blob/main/OBETA%20Warehousing%20Analytics%20Project)
+- Created a "snowflake" schema to analyze and define the relationships among variables in a vast warehouse order and picking dataset
+- Identified and resolved data quality issues
+- Utilized SQL for ETL processes
+- Calculated KPIs using R
+- Visualized real-time warehouse status using Tableau
+- Provided risk identification and improvement recommendations
 
  
