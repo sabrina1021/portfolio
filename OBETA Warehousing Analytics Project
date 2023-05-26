@@ -1,0 +1,754 @@
+#insert data from mysql to R
+
+p_load("RMySQL")
+
+library(RMySQL)
+library(DBI)
+
+RMySQL::
+  con<-dbConnect(MySQL(),
+                 username = 'root',
+                 password = 'travel601105',
+                 host='localhost',
+                 dbname ='hw')
+
+dbGetInfo(con)
+dbListTables(con)
+dbListFields(con,"product_data")
+dbListFields(con,"pick_data")
+
+# check if the data is successfully inserted
+
+obeta_2011<-dbGetQuery(con,"select*from obeta_2011")
+
+
+#find and clean the duplicated data 
+
+nrow(obeta_2011) #count rows of original db, find 1728226 rows
+which(duplicated(obeta_2011)) #find the location of duplicated rows
+sum(duplicated(obeta_2011)) #count the duplicated rows, find 336 rows
+unique_obeta_2011 <- obeta_2011[!duplicated(obeta_2011),] #delete duplicated rows
+nrow(unique_obeta_2011) #count rows of new db, find 1727890 rows
+
+
+#find and clean which "pick volume is 0"
+
+nrow(unique_obeta_2011[unique_obeta_2011$volume == "0",]) #find 43902 rows with "0 pick volume"
+first_clean_obeta_2011 <- unique_obeta_2011[!unique_obeta_2011$volume == "0",] #return 1693988 rows after first clean
+
+
+# solve error "argument is not numeric or logical: returning NA"
+sapply(first_clean_obeta_2011, mode) #check data type,find out "volume" should be changed from "character" to "numeric"
+tra_first_clean_obeta_2011 <- transform(first_clean_obeta_2011, volume = as.numeric(volume))
+
+
+#use 3s rule to find outliers base on the "pick volume" and handle them
+summary(tra_first_clean_obeta_2011)
+mean = mean(tra_first_clean_obeta_2011$volume) #62.275
+std = sd(tra_first_clean_obeta_2011$volume) #345.200
+
+#Outliers in 3s
+Tmin = mean-(3*std) #-973
+Tmax = mean+(3*std) #1098
+
+#Delete the outliers which are too large (larger than 25s) 
+Lmax = mean+(25*std) #8692
+Lmin = mean-(25*std) #-8567
+nrow(tra_first_clean_obeta_2011[which(tra_first_clean_obeta_2011$volume < Lmin | tra_first_clean_obeta_2011$volume > Lmax),]) #163 rows
+second_clean_obeta_2011 <- tra_first_clean_obeta_2011[(tra_first_clean_obeta_2011$volume >= Lmin & tra_first_clean_obeta_2011$volume <= Lmax),] #1683825 rows
+
+#Replace the other outliers to the boundary (3s & -3s)
+second_clean_obeta_2011$volume[second_clean_obeta_2011$volume <= -973] <- -973 #actually unnecessary to do this,cause all figures are larger than 0
+second_clean_obeta_2011$volume[second_clean_obeta_2011$volume >= 1098] <- 1098
+
+#check the result
+summary(second_clean_obeta_2011)
+
+#replace to short name
+X11 <- second_clean_obeta_2011
+
+#############################################################################################
+#start KPI calculation
+
+####### calculate KPI- Total number of orders over time by origin(The sum of orders in terms of 2 origins by day week month year)
+
+nrow(X11[X11$origin == "48",]) #1244360
+nrow(X11[X11$origin == "46",]) #439465
+
+
+#break down date into "date" and "time"
+
+X11$Date <- as.Date(X11$date) #Add Date column
+X11$Time <- format(as.POSIXct(X11$date),  #Add Time column
+                   format = "%H:%M:%S")
+
+#check class of date column - Date
+class(X11$Date) 
+
+
+#break down date into "Year" and "Month" and "Date"
+X11_new1 <- X11
+X11_new1$year <- strftime(X11_new1$Date,"%Y")
+X11_new1$month <- strftime(X11_new1$Date,"%m")
+X11_new1$day <- strftime(X11_new1$Date,"%d")
+
+
+
+# solve error "argument is not numeric or logical: returning NA"
+sapply(X11_new1, mode) #check data type,find out "origin" should be changed from "character" to "numeric"
+X11_new1 <- transform(X11_new1, origin = as.numeric(origin))
+X11_new1 <- transform(X11_new1, month = as.numeric(month))
+
+sapply(X11_new1, mode) #check new data type
+
+
+#count distinct order number group by "origin" & "month"
+install.packages("dplyr")
+library("dplyr")
+
+distinct_order_11 <- X11_new1 %>%
+  group_by(origin,month) %>%
+  summarise(distinct_ordernummber = n_distinct(ordernumber))
+
+###finish calculating KPI 2011
+
+###start calculating KPI 2012
+# check if the data is successfully inserted
+
+obeta_2012<-dbGetQuery(con,"select*from obeta_2012")
+
+
+#find and clean the duplicated data 
+
+nrow(obeta_2012) #count rows of original db, find 3055905 rows
+sum(duplicated(obeta_2012)) #count the duplicated rows, find 287 rows
+unique_obeta_2012 <- obeta_2012[!duplicated(obeta_2012),] #delete duplicated rows
+nrow(unique_obeta_2012) #count rows of new db, find 3055618 rows
+
+
+#find and clean which "pick volume is 0"
+
+nrow(unique_obeta_2012[unique_obeta_2012$volume == "0",]) #find 66987 rows with "0 pick volume"
+first_clean_obeta_2012 <- unique_obeta_2012[!unique_obeta_2012$volume == "0",] #return 2988631 rows after first clean
+
+
+# solve error "argument is not numeric or logical: returning NA"
+sapply(first_clean_obeta_2012, mode) #check data type,find out "volume" should be changed from "character" to "numeric"
+tra_first_clean_obeta_2012 <- transform(first_clean_obeta_2012, volume = as.numeric(volume))
+
+
+#use 3s rule to find outliers base on the "pick volume" and handle them
+summary(tra_first_clean_obeta_2012)
+mean = mean(tra_first_clean_obeta_2012$volume) #62.72
+std = sd(tra_first_clean_obeta_2012$volume) #363.187
+
+#Outliers in 3s
+Tmin = mean-(3*std) #-1027
+Tmax = mean+(3*std) #1152
+
+#Delete the outliers which are too large (larger than 25s) 
+Lmax = mean+(25*std) #9142
+Lmin = mean-(25*std) #-9016
+nrow(tra_first_clean_obeta_2012[which(tra_first_clean_obeta_2012$volume < Lmin | tra_first_clean_obeta_2012$volume > Lmax),]) #246 rows
+second_clean_obeta_2012 <- tra_first_clean_obeta_2012[(tra_first_clean_obeta_2012$volume >= Lmin & tra_first_clean_obeta_2012$volume <= Lmax),] #2988385 rows
+
+#Replace the other outliers to the boundary (3s & -3s)
+second_clean_obeta_2012$volume[second_clean_obeta_2012$volume >= Tmax] <- Tmax
+
+#check the result
+summary(second_clean_obeta_2012)
+
+#replace to short name
+X12 <- second_clean_obeta_2012
+
+
+#break down date into "date" and "time"
+X12$Date <- as.Date(X12$date) #Add Date column
+X12$Time <- format(as.POSIXct(X12$date),  #Add Time column
+                   format = "%H:%M:%S")
+
+#check class of date column - Date
+class(X12$Date) 
+
+
+#break down date into "Year" and "Month" and "Date"
+X12_new1 <- X12
+X12_new1$year <- strftime(X12_new1$Date,"%Y")
+X12_new1$month <- strftime(X12_new1$Date,"%m")
+X12_new1$day <- strftime(X12_new1$Date,"%d")
+
+
+# solve error "argument is not numeric or logical: returning NA"
+sapply(X12_new1, mode) #check data type,find out "origin" should be changed from "character" to "numeric"
+X12_new1 <- transform(X12_new1, origin = as.numeric(origin))
+X12_new1 <- transform(X12_new1, month = as.numeric(month))
+
+sapply(X12_new1, mode) #check new data type
+
+
+#count distinct order number group by "origin" & "month"
+
+library("dplyr")
+distinct_order_12 <- X12_new1 %>%
+  group_by(origin,month) %>%
+  summarise(distinct_ordernummber = n_distinct(ordernumber))
+
+
+###finish calculating KPI 2012
+
+
+#### 3rd presentation
+
+
+# calculate again, group by year, from 2015 to 2020
+
+distinct_order_15 <- X15_new %>%
+  group_by(origin,year) %>%
+  summarise(distinct_ordernummber = n_distinct(ordernumber))
+
+
+# transform to propotion
+distinct_order_15 <- transform(distinct_order_15,
+                               percentage = ave(distinct_ordernummber,
+                                              year,
+                                              FUN = prop.table))
+
+distinct_order_16 <- X16_new %>%
+  group_by(origin,year) %>%
+  summarise(distinct_ordernummber = n_distinct(ordernumber))
+
+
+distinct_order_16 <- transform(distinct_order_16,
+                               percentage = ave(distinct_ordernummber,
+                                          year,
+                                          FUN = prop.table))
+
+distinct_order_17 <- X17_new %>%
+  group_by(origin,year) %>%
+  summarise(distinct_ordernummber = n_distinct(ordernumber))
+
+distinct_order_17 <- transform(distinct_order_17,
+                               percentage = ave(distinct_ordernummber,
+                                          year,
+                                          FUN = prop.table))
+
+distinct_order_18 <- X18_new %>%
+  group_by(origin,year) %>%
+  summarise(distinct_ordernummber = n_distinct(ordernumber))
+
+distinct_order_18 <- transform(distinct_order_18,
+                               percentage = ave(distinct_ordernummber,
+                                          year,
+                                          FUN = prop.table))
+
+distinct_order_19 <- X19_new %>%
+  group_by(origin,year) %>%
+  summarise(distinct_ordernummber = n_distinct(ordernumber))
+
+distinct_order_19 <- transform(distinct_order_19,
+                               percentage = ave(distinct_ordernummber,
+                                          year,
+                                          FUN = prop.table))
+
+distinct_order_20 <- X20_new %>%
+  group_by(origin,year) %>%
+  summarise(distinct_ordernummber = n_distinct(ordernumber))
+
+distinct_order_20 <- transform(distinct_order_20,
+                               percentage = ave(distinct_ordernummber,
+                                          year,
+                                          FUN = prop.table))
+
+#merge all df from 2015 to 2020
+
+merge_dist_order_1520 <- rbind(distinct_order_15,distinct_order_16,distinct_order_17,distinct_order_18,distinct_order_19,distinct_order_20)
+
+
+####### calculate KPI - Total number of orders over time by warehouse section (Month, Year) 
+
+#calculate in 2011 
+order_wh_11 <- X11_new %>%
+  group_by(section,year,month) %>%
+  summarise(distinct_wh_ordernum = n_distinct(ordernumber))
+
+#calculate in 2012
+order_wh_12 <- X12_new %>%
+  group_by(section,year,month) %>%
+  summarise(distinct_wh_ordernum = n_distinct(ordernumber))
+
+#calculate in 2013
+order_wh_13 <- X13_new %>%
+  group_by(section,year,month) %>%
+  summarise(distinct_wh_ordernum = n_distinct(ordernumber))
+
+#calculate in 2014
+order_wh_14 <- X14_new %>%
+  group_by(section,year,month) %>%
+  summarise(distinct_wh_ordernum = n_distinct(ordernumber))
+
+#calculate in 2015
+order_wh_15 <- X15_new %>%
+  group_by(section,year,month) %>%
+  summarise(distinct_wh_ordernum = n_distinct(ordernumber))
+
+#calculate in 2016
+order_wh_16 <- X16_new %>%
+  group_by(section,year,month) %>%
+  summarise(distinct_wh_ordernum = n_distinct(ordernumber))
+
+#calculate in 2017
+order_wh_17 <- X17_new %>%
+  group_by(section,year,month) %>%
+  summarise(distinct_wh_ordernum = n_distinct(ordernumber))
+
+#calculate in 2018
+order_wh_18 <- X18_new %>%
+  group_by(section,year,month) %>%
+  summarise(distinct_wh_ordernum = n_distinct(ordernumber))
+
+#calculate in 2019
+order_wh_19 <- X19_new %>%
+  group_by(section,year,month) %>%
+  summarise(distinct_wh_ordernum = n_distinct(ordernumber))
+
+#calculate in 2020
+order_wh_20 <- X20_new %>%
+  group_by(section,year,month) %>%
+  summarise(distinct_wh_ordernum = n_distinct(ordernumber))
+
+
+### 3rd presantation
+
+#calculate in 2015
+order_wh_15 <- X15_new %>%
+  group_by(section,year) %>%
+  summarise(distinct_wh_ordernum = n_distinct(ordernumber))
+
+
+order_wh_15 <- transform(order_wh_15,
+                         percentage = ave(distinct_wh_ordernum,
+                                      year,
+                                      FUN = prop.table))
+
+#calculate in 2016
+order_wh_16 <- X16_new %>%
+  group_by(section,year) %>%
+  summarise(distinct_wh_ordernum = n_distinct(ordernumber))
+
+
+order_wh_16 <- transform(order_wh_16,
+                         percentage = ave(distinct_wh_ordernum,
+                                          year,
+                                          FUN = prop.table))
+
+
+#calculate in 2017
+order_wh_17 <- X17_new %>%
+  group_by(section,year) %>%
+  summarise(distinct_wh_ordernum = n_distinct(ordernumber))
+
+order_wh_17 <- transform(order_wh_17,
+                         percentage = ave(distinct_wh_ordernum,
+                                          year,
+                                          FUN = prop.table))
+
+
+#calculate in 2018
+order_wh_18 <- X18_new %>%
+  group_by(section,year) %>%
+  summarise(distinct_wh_ordernum = n_distinct(ordernumber))
+
+order_wh_18 <- transform(order_wh_18,
+                         percentage = ave(distinct_wh_ordernum,
+                                          year,
+                                          FUN = prop.table))
+
+#calculate in 2019
+order_wh_19 <- X19_new %>%
+  group_by(section,year) %>%
+  summarise(distinct_wh_ordernum = n_distinct(ordernumber))
+
+order_wh_19 <- transform(order_wh_19,
+                         percentage = ave(distinct_wh_ordernum,
+                                          year,
+                                          FUN = prop.table))
+
+#calculate in 2020
+order_wh_20 <- X20_new %>%
+  group_by(section,year) %>%
+  summarise(distinct_wh_ordernum = n_distinct(ordernumber))
+
+order_wh_20 <- transform(order_wh_20,
+                         percentage = ave(distinct_wh_ordernum,
+                                          year,
+                                          FUN = prop.table))
+
+
+#merge all df from 2015 to 2020
+
+merge_order_wh_1520 <- rbind(order_wh_15,order_wh_16,order_wh_17,order_wh_18,order_wh_19,order_wh_20)
+
+
+####### #calculate KPI - Total pick in each product group (The sum of picks in terms of 18 distinct product group)
+
+RMySQL::
+  con<-dbConnect(MySQL(),
+                 username = 'root',
+                 password = 'travel601105',
+                 host='localhost',
+                 dbname ='hw_kpi')
+
+dbGetInfo(con)
+dbListTables(con)
+
+# check if the data can successfully inserted
+merge_pick_pg_15_20 <-dbGetQuery(con,"select*from merge_pick_pg_1520")
+
+# total order in each product group (The sum of orders in terms of 18 distinct product group)
+order_pg_15 <- X15_new %>% 
+  group_by (year, month,Category) %>% 
+  summarise(totalorders_pg =  n_distinct(ordernumber))
+
+order_pg_16 <- X16_new %>% 
+  group_by (year, month,Category) %>% 
+  summarise(totalorders_pg =  n_distinct(ordernumber))
+
+order_pg_17 <- X17_new %>% 
+  group_by (year, month,Category) %>% 
+  summarise(totalorders_pg =  n_distinct(ordernumber))
+
+order_pg_18 <- X18_new %>% 
+  group_by (year, month,Category) %>% 
+  summarise(totalorders_pg =  n_distinct(ordernumber))
+
+order_pg_19 <- X19_new %>% 
+  group_by (year, month,Category) %>% 
+  summarise(totalorders_pg =  n_distinct(ordernumber))
+
+order_pg_20 <- X20_new %>% 
+  group_by (year, month,Category) %>% 
+  summarise(totalorders_pg =  n_distinct(ordernumber))
+
+#merge all df from 2015 to 2020
+
+merge_order_pg_1520 <- rbind(order_pg_15,order_pg_16,order_pg_17,order_pg_18,order_pg_19,order_pg_20)
+
+#translate
+merge_order_pg_1520$Category <- sub("16_SonderverkÃ¤ufe","16_Special Sales",merge_order_pg_1520$Category) 
+merge_order_pg_1520$Category <- sub("18_Haustechnik_HausgerÃ¤te","18 Household appliances",merge_order_pg_1520$Category) 
+merge_order_pg_1520$Category <- sub("19_Werkzeug","19_Tool",merge_order_pg_1520$Category) 
+merge_order_pg_1520$Category <- sub("20_C-Artikel","20_C-article",merge_order_pg_1520$Category) 
+merge_order_pg_1520$Category <- sub("31_Install.-Befestigungs-Mat.","31_Install.-Fastening-Mat",merge_order_pg_1520$Category) 
+merge_order_pg_1520$Category <- sub("32_Schalter_Steckvorrichtg","32_switch_connector",merge_order_pg_1520$Category) 
+merge_order_pg_1520$Category <- sub("33_SchaltgerÃ¤te","33_switching devices",merge_order_pg_1520$Category) 
+merge_order_pg_1520$Category <- sub("34_Verteiler_SchrÃ¤nke","34_distribution_cabinets",merge_order_pg_1520$Category) 
+merge_order_pg_1520$Category <- sub("35_Leuchten","35_Lights",merge_order_pg_1520$Category) 
+merge_order_pg_1520$Category <- sub("36_Entladungs-Leuchten","36_discharge lights",merge_order_pg_1520$Category) 
+merge_order_pg_1520$Category <- sub("37_Leuchtmittel","37_bulbs",merge_order_pg_1520$Category) 
+merge_order_pg_1520$Category <- sub("38_Leitungen","38_lines",merge_order_pg_1520$Category) 
+merge_order_pg_1520$Category <- sub("40_Sprechen_Schwachstrom","40_Speak_Low Current",merge_order_pg_1520$Category) 
+merge_order_pg_1520$Category <- sub("41_Antenne","41_Antenna",merge_order_pg_1520$Category) 
+merge_order_pg_1520$Category <- sub("42_Netzwerktechnik","42_Network technology",merge_order_pg_1520$Category) 
+
+
+#######calculate KPI - Average number of products per order 
+# X = The distinct product ID in an order
+# The sum of X / the sum of orders
+
+#calculate in 2011 
+dis_product_order_11 <- X11_new %>%
+  group_by(ordernumber,year,month) %>%
+  summarise(distinct_productID = n_distinct(ID))
+
+avg_product_order_11 <- mean(dis_product_order_11$distinct_productID)
+
+
+#calculate in 2012 
+dis_product_order_12 <- X12_new %>%
+  group_by(ordernumber,year,month) %>%
+  summarise(distinct_productID = n_distinct(ID))
+
+avg_product_order_12 <- mean(dis_product_order_12$distinct_productID)
+
+#calculate in 2013
+dis_product_order_13 <- X13_new %>%
+  group_by(ordernumber,year,month) %>%
+  summarise(distinct_productID = n_distinct(ID))
+
+avg_product_order_13 <- mean(dis_product_order_13$distinct_productID)
+
+
+#calculate in 2014 
+dis_product_order_14 <- X14_new %>%
+  group_by(ordernumber,year,month) %>%
+  summarise(distinct_productID = n_distinct(ID))
+
+avg_product_order_14 <- mean(dis_product_order_14$distinct_productID)
+
+
+#calculate in 2015 
+dis_product_order_15 <- X15_new %>%
+  group_by(ordernumber,year,month) %>%
+  summarise(distinct_productID = n_distinct(ID))
+
+avg_product_order_15 <- mean(dis_product_order_15$distinct_productID)
+
+
+#calculate in 2016 
+dis_product_order_16 <- X16_new %>%
+  group_by(ordernumber,year,month) %>%
+  summarise(distinct_productID = n_distinct(ID))
+
+avg_product_order_16 <- mean(dis_product_order_16$distinct_productID)
+
+
+#calculate in 2017 
+dis_product_order_17 <- X17_new %>%
+  group_by(ordernumber,year,month) %>%
+  summarise(distinct_productID = n_distinct(ID))
+
+avg_product_order_17 <- mean(dis_product_order_17$distinct_productID)
+
+
+#calculate in 2018
+dis_product_order_18 <- X18_new %>%
+  group_by(ordernumber,year,month) %>%
+  summarise(distinct_productID = n_distinct(ID))
+
+avg_product_order_18 <- mean(dis_product_order_18$distinct_productID)
+
+
+#calculate in 2019 
+dis_product_order_19 <- X19_new %>%
+  group_by(ordernumber,year,month) %>%
+  summarise(distinct_productID = n_distinct(ID))
+
+avg_product_order_19 <- mean(dis_product_order_19$distinct_productID)
+
+
+#calculate in 2020
+dis_product_order_20 <- X20_new %>%
+  group_by(ordernumber,year,month) %>%
+  summarise(distinct_productID = n_distinct(ID))
+
+avg_product_order_20 <- mean(dis_product_order_20$distinct_productID)
+
+
+#create a list of the years
+year <- list(2011:2020)
+
+#create a list of avg_dis_product per order for all years
+avg_dis_product_order <- list(avg_product_order_11,avg_product_order_12,avg_product_order_13,avg_product_order_14,avg_product_order_15,avg_product_order_16,avg_product_order_17,avg_product_order_18,avg_product_order_19,avg_product_order_20)
+
+
+#create a df by the list
+avg_dis_product_order_df <- data.frame(I(year),I(avg_dis_product_order))
+
+
+######### 3rd presentation
+#total order for each month (2015 to 2020)
+
+# group by year, from 2015 to 2020
+
+distinct_ordernum_15 <- X15_new %>%
+  group_by(year,month) %>%
+  summarise(distinct_ordernummber = n_distinct(ordernumber))
+
+# order by order number(small to big)
+distinct_ordernum_15 <- distinct_ordernum_15[order(distinct_ordernum_15$distinct_ordernummber),]
+
+
+# small- big- 
+
+#
+distinct_ordernum_16 <- X16_new %>%
+  group_by(year,month) %>%
+  summarise(distinct_ordernummber = n_distinct(ordernumber))
+
+distinct_ordernum_16 <-distinct_ordernum_16[order(distinct_ordernum_16$distinct_ordernummber),]
+
+#
+distinct_ordernum_17 <- X17_new %>%
+  group_by(year,month) %>%
+  summarise(distinct_ordernummber = n_distinct(ordernumber))
+
+distinct_ordernum_17 <-distinct_ordernum_17[order(distinct_ordernum_17$distinct_ordernummber),]
+
+#
+distinct_ordernum_18 <- X18_new %>%
+  group_by(year,month) %>%
+  summarise(distinct_ordernummber = n_distinct(ordernumber))
+
+distinct_ordernum_18 <-distinct_ordernum_18[order(distinct_ordernum_18$distinct_ordernummber),]
+
+#
+distinct_ordernum_19 <- X19_new %>%
+  group_by(year,month) %>%
+  summarise(distinct_ordernummber = n_distinct(ordernumber))
+
+distinct_ordernum_19 <-distinct_ordernum_19[order(distinct_ordernum_19$distinct_ordernummber),]
+
+#
+distinct_ordernum_20 <- X20_new %>%
+  group_by(year,month) %>%
+  summarise(distinct_ordernummber = n_distinct(ordernumber))
+
+distinct_ordernum_20 <-distinct_ordernum_20[order(distinct_ordernum_20$distinct_ordernummber),]
+
+
+## low season- April,May,Dec  ## high season - Oct,Nov
+
+# find out the Seasonality pattern by product groups (in low season/ high season)
+
+# delete month = 1,2,3,6,7,8,9
+totalpicks_pg_15_LH <- totalpicks_pg_15[totalpicks_pg_15$month != "1" & 
+                                          totalpicks_pg_15$month != "2" & totalpicks_pg_15$month != "3"& 
+                                          totalpicks_pg_15$month != "6"& totalpicks_pg_15$month != "7"& 
+                                          totalpicks_pg_15$month != "8"& totalpicks_pg_15$month != "9",]
+
+
+# try to convert to perc but fail
+sum(totalpicks_pg_15_LH$month == 4)
+
+totalpicks_pg_15_LH %>%
+  filter(month == 4) %>%
+  select(month) %>%
+  summarise(sum15_04 = sum(totalpicks_pg_15_LH$totalpicks_pg))
+
+
+
+totalpicks_pg_15_LH_prec <- transform(distinct_order_20,
+                                      percentage = ave(distinct_ordernummber,
+                                                       year,
+                                                       FUN = prop.table))
+#
+totalpicks_pg_15 <- X15_new %>% 
+  group_by (year, month,Category) %>% 
+  summarise(totalpicks_pg = n())
+
+
+
+#
+totalpicks_pg_16 <- X16_new %>% 
+  group_by (year, month,Category) %>% 
+  summarise(totalpicks_pg = n())
+
+#
+totalpicks_pg_17 <- X17_new %>% 
+  group_by (year, month,Category) %>% 
+  summarise(totalpicks_pg = n())
+
+#
+totalpicks_pg_18 <- X18_new %>% 
+  group_by (year, month,Category) %>% 
+  summarise(totalpicks_pg = n())
+
+#
+totalpicks_pg_19 <- X19_new %>% 
+  group_by (year, month,Category) %>% 
+  summarise(totalpicks_pg = n())
+
+totalpicks_pg_19
+
+#
+totalpicks_pg_20 <- X20_new %>% 
+  group_by (year, month,Category) %>% 
+  summarise(totalpicks_pg = n())
+
+
+
+#merge all df from 2015 to 2020
+
+merge_totalpicks_pg_1520 <- rbind(totalpicks_pg_15,totalpicks_pg_16,totalpicks_pg_17,totalpicks_pg_18,totalpicks_pg_19,totalpicks_pg_20)
+
+
+
+#translate to english
+merge_totalpicks_pg_1520$Category <- sub("16_SonderverkÃ¤ufe","16_Special Sales",merge_totalpicks_pg_1520$Category) 
+merge_totalpicks_pg_1520$Category <- sub("18_Haustechnik_HausgerÃ¤te","18 Household appliances",merge_totalpicks_pg_1520$Category) 
+merge_totalpicks_pg_1520$Category <- sub("19_Werkzeug","19_Tool",merge_totalpicks_pg_1520$Category) 
+merge_totalpicks_pg_1520$Category <- sub("20_C-Artikel","20_C-article",merge_totalpicks_pg_1520$Category) 
+merge_totalpicks_pg_1520$Category <- sub("31_Install.-Befestigungs-Mat.","31_Install.-Fastening-Mat",merge_totalpicks_pg_1520$Category) 
+merge_totalpicks_pg_1520$Category <- sub("32_Schalter_Steckvorrichtg","32_switch_connector",merge_totalpicks_pg_1520$Category) 
+merge_totalpicks_pg_1520$Category <- sub("33_SchaltgerÃ¤te","33_switching devices",merge_totalpicks_pg_1520$Category) 
+merge_totalpicks_pg_1520$Category <- sub("34_Verteiler_SchrÃ¤nke","34_distribution_cabinets",merge_totalpicks_pg_1520$Category) 
+merge_totalpicks_pg_1520$Category <- sub("35_Leuchten","35_Lights",merge_totalpicks_pg_1520$Category) 
+merge_totalpicks_pg_1520$Category <- sub("36_Entladungs-Leuchten","36_discharge lights",merge_totalpicks_pg_1520$Category) 
+merge_totalpicks_pg_1520$Category <- sub("37_Leuchtmittel","37_bulbs",merge_totalpicks_pg_1520$Category) 
+merge_totalpicks_pg_1520$Category <- sub("38_Leitungen","38_lines",merge_totalpicks_pg_1520$Category) 
+merge_totalpicks_pg_1520$Category <- sub("40_Sprechen_Schwachstrom","40_Speak_Low Current",merge_totalpicks_pg_1520$Category) 
+merge_totalpicks_pg_1520$Category <- sub("41_Antenne","41_Antenna",merge_totalpicks_pg_1520$Category) 
+merge_totalpicks_pg_1520$Category <- sub("42_Netzwerktechnik","42_Network technology",merge_totalpicks_pg_1520$Category) 
+
+
+#remove null
+which(is.na(merge_totalpicks_pg_1520))
+which(is.na(totalpicks_pg_19))                               
+
+merge_totalpicks_pg_1520 <- na.omit(merge_totalpicks_pg_1520)                                    
+totalpicks_pg_19 <- na.omit(totalpicks_pg_19)
+
+
+### revise , total order by product group
+
+totalorder_pg_15 <- X15_new %>% 
+  group_by (year, month,Category) %>% 
+  summarise(totalorder_pg = n_distinct(ordernumber))
+
+
+totalorder_pg_16 <- X16_new %>% 
+  group_by (year, month,Category) %>% 
+  summarise(totalorder_pg = n_distinct(ordernumber))
+
+
+totalorder_pg_17 <- X17_new %>% 
+  group_by (year, month,Category) %>% 
+  summarise(totalorder_pg = n_distinct(ordernumber))
+
+
+totalorder_pg_18 <- X18_new %>% 
+  group_by (year, month,Category) %>% 
+  summarise(totalorder_pg = n_distinct(ordernumber))
+
+
+totalorder_pg_19 <- X19_new %>% 
+  group_by (year, month,Category) %>% 
+  summarise(totalorder_pg = n_distinct(ordernumber))
+
+
+totalorder_pg_20 <- X20_new %>% 
+  group_by (year, month,Category) %>% 
+  summarise(totalorder_pg = n_distinct(ordernumber))
+
+#merge all df from 2015 to 2020
+
+merge_totalorder_pg_1520 <- rbind(totalorder_pg_15,totalorder_pg_16,totalorder_pg_17,totalorder_pg_18,totalorder_pg_19,totalorder_pg_20)
+
+
+#check null
+which(is.na(merge_totalorder_pg_1520))
+merge_totalorder_pg_1520 <- na.omit(merge_totalorder_pg_1520)    
+
+
+#translate to english
+merge_totalorder_pg_1520$Category <- sub("16_SonderverkÃ¤ufe","16_Special Sales",merge_totalorder_pg_1520$Category) 
+merge_totalorder_pg_1520$Category <- sub("18_Haustechnik_HausgerÃ¤te","18 Household appliances",merge_totalorder_pg_1520$Category) 
+merge_totalorder_pg_1520$Category <- sub("19_Werkzeug","19_Tool",merge_totalorder_pg_1520$Category) 
+merge_totalorder_pg_1520$Category <- sub("20_C-Artikel","20_C-article",merge_totalorder_pg_1520$Category) 
+merge_totalorder_pg_1520$Category <- sub("31_Install.-Befestigungs-Mat.","31_Install.-Fastening-Mat",merge_totalorder_pg_1520$Category) 
+merge_totalorder_pg_1520$Category <- sub("32_Schalter_Steckvorrichtg","32_switch_connector",merge_totalorder_pg_1520$Category) 
+merge_totalorder_pg_1520$Category <- sub("33_SchaltgerÃ¤te","33_switching devices",merge_totalorder_pg_1520$Category) 
+merge_totalorder_pg_1520$Category <- sub("34_Verteiler_SchrÃ¤nke","34_distribution_cabinets",merge_totalorder_pg_1520$Category) 
+merge_totalorder_pg_1520$Category <- sub("35_Leuchten","35_Lights",merge_totalorder_pg_1520$Category) 
+merge_totalorder_pg_1520$Category <- sub("36_Entladungs-Leuchten","36_discharge lights",merge_totalorder_pg_1520$Category) 
+merge_totalorder_pg_1520$Category <- sub("37_Leuchtmittel","37_bulbs",merge_totalorder_pg_1520$Category) 
+merge_totalorder_pg_1520$Category <- sub("38_Leitungen","38_lines",merge_totalorder_pg_1520$Category) 
+merge_totalorder_pg_1520$Category <- sub("40_Sprechen_Schwachstrom","40_Speak_Low Current",merge_totalorder_pg_1520$Category) 
+merge_totalorder_pg_1520$Category <- sub("41_Antenne","41_Antenna",merge_totalorder_pg_1520$Category) 
+merge_totalorder_pg_1520$Category <- sub("42_Netzwerktechnik","42_Network technology",merge_totalorder_pg_1520$Category) 
+
+
+#
+
+merge_totalorder_pg_1520_new <- na.omit(merge_totalorder_pg_1520)
+which(is.na(merge_totalorder_pg_1520_new))
