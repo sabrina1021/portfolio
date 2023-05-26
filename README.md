@@ -18,20 +18,20 @@
 - Achieved a high IoU on the test set and accurately located and outlined roof positions and shapes in satellite cloud images
 
 ### training_image&label_example
-![](https://github.com/sasa1021/portfolio/blob/main/images/121_train.png)
-![](https://github.com/sasa1021/portfolio/blob/main/images/121.png)
+![](images/121_train.png)
+![](images/121.png)
 
 ### Albumentations_training_image&label_example
-![](https://github.com/sasa1021/portfolio/blob/main/images/augmented_image_1.png)
-![](https://github.com/sasa1021/portfolio/blob/main/images/augmented_label_1.png)
+![](images/augmented_image_1.png)
+![](images/augmented_label_1.png)
 
-![](https://github.com/sasa1021/portfolio/blob/main/images/training%20and%20validation%20loss.png)
+![](images/training%20and%20validation%20loss.png)
 
-![](https://github.com/sasa1021/portfolio/blob/main/images/training%20and%20validation%20IoU.png)
+![](images/training%20and%20validation%20IoU.png)
 
 ### test_image&label_example
-![](https://github.com/sasa1021/portfolio/blob/main/images/539.png)
-![](https://github.com/sasa1021/portfolio/blob/main/images/539.jpg)
+![](images/539.png)
+![](images/539.jpg)
 
 
 
