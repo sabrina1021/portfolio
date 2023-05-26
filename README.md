@@ -24,10 +24,8 @@
 ![](https://github.com/sasa1021/portfolio/blob/main/images/augmented_image_1.png)
 ![](https://github.com/sasa1021/portfolio/blob/main/images/augmented_label_1.png)
 
-### training and validation loss
 ![](https://github.com/sasa1021/portfolio/blob/main/images/training%20and%20validation%20loss.png)
 
-### training and validation IoU
 ![](https://github.com/sasa1021/portfolio/blob/main/images/training%20and%20validation%20IoU.png)
 
 ### test_image&label_example
