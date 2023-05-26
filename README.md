@@ -16,23 +16,23 @@
 - Trained the model for 100 epochs
 - Achieved a high IoU on the test set and accurately located and outlined roof positions and shapes in satellite cloud images
 
-###training_image&label_example
+### training_image&label_example
 
 ![](https://github.com/sasa1021/portfolio/blob/main/images/121_train.png)
 ![](https://github.com/sasa1021/portfolio/blob/main/images/121.png)
 
-###Albumentations_training_image&label_example
+### Albumentations_training_image&label_example
 
 ![](https://github.com/sasa1021/portfolio/blob/main/images/augmented_image_1.png)
 ![](https://github.com/sasa1021/portfolio/blob/main/images/augmented_label_1.png)
 
-###training and validation loss
+### training and validation loss
 
 ![](https://github.com/sasa1021/portfolio/blob/main/images/training%20and%20validation%20loss.png)
 training and validation IoU
 ![](https://github.com/sasa1021/portfolio/blob/main/images/training%20and%20validation%20IoU.png)
 
-###test_image&label_example
+### test_image&label_example
 
 ![](https://github.com/sasa1021/portfolio/blob/main/images/539.png)
 ![](https://github.com/sasa1021/portfolio/blob/main/images/539.jpg)
