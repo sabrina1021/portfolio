@@ -42,6 +42,9 @@
 since the 1980s
 
 
+
+
+
 # [Project 4: OBETA Warehousing Analytics Project](https://github.com/sasa1021/portfolio/blob/main/OBETA%20Warehousing%20Analytics%20Project)
 - Created a "snowflake" schema to analyze and define the relationships among variables in a vast warehouse order and picking dataset
 - Identified and resolved data quality issues
