@@ -266,13 +266,13 @@ no_corr = (np.abs(corr) < 0.3).sum().sum() / 2 / total_corr * 100
 weak_corr = ((np.abs(corr) >= 0.3) & (np.abs(corr) < 0.5)).sum().sum() / 2 / total_corr * 100
 moderate_corr = ((np.abs(corr) >= 0.5) & (np.abs(corr) < 0.8)).sum().sum() / 2 / total_corr * 100
 strong_corr = ((np.abs(corr) >= 0.8) & (np.abs(corr) < 1)).sum().sum() / 2 / total_corr * 100
-absolute_corr = (np.abs(corr) == 1).sum().sum() / 2 / total_corr * 100
+perfect_corr = (np.abs(corr) == 1).sum().sum() / 2 / total_corr * 100
 
 # Create a list of the values
-values = [no_corr, weak_corr, moderate_corr, strong_corr, absolute_corr]
+values = [no_corr, weak_corr, moderate_corr, strong_corr, perfect_corr]
 
 # Create a list of the labels
-labels = ['No_Corr', 'Weak_Corr', 'Moderate_Corr', 'Strong_Corr', 'Absolute_Corr']
+labels = ['No_Corr', 'Weak_Corr', 'Moderate_Corr', 'Strong_Corr', 'Perfect_Corr']
 
 # Create a bar chart
 plt.bar(labels, values,color="green")
@@ -291,3 +291,419 @@ plt.xticks(rotation=45)
 
 # Display the plot
 plt.show()
+
+
+
+#########################################################
+
+### preprocessing only on "training set"
+
+### push back outliers to 3S boundaries
+# recap- train_outliers= ((train_summary_data > (train_mean + 3*train_std)) | (train_summary_data < (train_mean - 3*train_std))).sum()/ len(train_summary_data)
+
+train_sub_outlier = train_summary_data.copy()
+
+right_boundary = train_mean + 3*train_std
+left_boundary = train_mean - 3*train_std
+
+
+train_sub_outlier = train_sub_outlier.where(train_sub_outlier <= right_boundary, other=right_boundary, axis=0) 
+train_sub_outlier = train_sub_outlier.where(train_sub_outlier >= left_boundary, other=left_boundary, axis=0)
+# match the condition-> remain, other -> substitue # axis=0 : by row
+
+
+
+### drop the features which have less than 50% of non_NA -> more than 50% NA
+
+# recap
+# threshold = 0.5
+# high_na_cols = na_column_percentage[na_column_percentage > threshold].index
+# print(high_na_cols)
+
+train_outlier_NA = train_sub_outlier.copy()
+print(train_outlier_NA.shape) #(1253, 590)
+len(high_na_cols) # 24
+train_outlier_NA = train_outlier_NA.drop(columns=high_na_cols)
+train_outlier_NA.shape #(1253, 566)
+
+
+### drop constant features
+
+# recap
+# feature_var_df[feature_var_df['variance']==0].value_counts()
+# 116 constant features
+
+train_constant = feature_var_df[feature_var_df['variance']==0]
+train_constant = train_constant.index.tolist()
+print(train_constant)
+len(train_constant) # 116
+
+train_out_NA_con = train_outlier_NA.copy()
+train_out_NA_con = train_out_NA_con.drop(columns=train_constant)
+train_out_NA_con.shape #(1253, 450)
+
+
+### impute NA
+
+# 1. Mean Imputation (cons- lower var )
+# 2. Regression Imputation
+# 3. Hot-Deck Imputation 
+#    (average from similar/nearby observations)
+#    (nearest neighbors based on distance/similarity score/relevant criteria)
+# 4. KNN Imputation  
+#    (KNN rely on measuring the distance between objects, recommend scaling first. 
+#    (but it's only "temporary scaling", not the scaling to build final model.)
+# 5. MICE Imputation
+#    (If NA% is high -> conduct more rounds(>5), but "higher rounds get better result" is not the case.)
+
+# here, we only use 4.~ 5.
+
+
+
+### KNN Imputation
+KNN_imputed_df = train_out_NA_con.copy()
+KNN_imputed_df.isnull().any().sum() #439
+
+# "temporary scaling" to make sure distance between features are comparable
+from sklearn.preprocessing import StandardScaler
+KNN_scaler = StandardScaler()
+KNN_imputed_df = KNN_scaler.fit_transform(KNN_imputed_df)
+
+
+# impute
+from sklearn.impute import KNNImputer
+KNN_imp = KNNImputer(n_neighbors=5)
+KNN_imputed_df = KNN_imp.fit_transform(KNN_imputed_df)
+KNN_imputed_df = pd.DataFrame(KNN_imputed_df, columns=train_out_NA_con.columns)
+
+
+# reverse to original scale
+KNN_imputed_df = KNN_scaler.inverse_transform(KNN_imputed_df)
+KNN_imputed_df = pd.DataFrame(KNN_imputed_df, columns=train_out_NA_con.columns)
+KNN_imputed_df.isnull().any().sum() #0
+
+
+
+
+### MICE Imputation
+MICE_imputed_df = train_out_NA_con.copy()
+from sklearn.experimental import enable_iterative_imputer
+from sklearn.impute import IterativeImputer
+
+MICE_imputer = IterativeImputer()
+MICE_imputed_df = MICE_imputer.fit_transform(MICE_imputed_df)
+MICE_imputed_df = pd.DataFrame(MICE_imputed_df, columns=train_out_NA_con.columns)
+
+MICE_imputed_df.isnull().any().sum() #0
+
+
+
+
+#################################################################
+
+
+### feature selection (by the result from "KNN_imputed_df")
+
+### Method 1 :Boruta 
+### (Build around RF,can be used on any tree MD, e.g.,RF,XGBoost,Regression models)
+### 01 RandomForestClassifier -> compute feature importance
+### 02 Boruta uses the results from RFC for feature selection and evaluates the significance of features using shadow features and z-scores
+
+
+KNN_feat_sel = KNN_imputed_df.copy()
+KNN_feat_sel = KNN_feat_sel.join(train_set.iloc[:, -1])
+
+
+# define the dependent variable (target value)
+KNN_Y = KNN_feat_sel['Pass/Fail'].values
+
+
+# Encoding categorical data for futher usage in model training process
+from sklearn.preprocessing import LabelEncoder
+# LabelEncoder: converting categorical features into numerical representations 
+# (start from 0, if we have 3 category -> 0,1,2)
+labelencoder = LabelEncoder()
+KNN_Y = labelencoder.fit_transform(KNN_Y) # -1 -> 0 , 1-> 1
+
+
+# define the independent variable
+KNN_X = KNN_feat_sel.drop('Pass/Fail', axis=1)
+
+feature_names = np.array(KNN_X.columns)
+
+KNN_X = KNN_feat_sel.drop('Pass/Fail', axis=1).values
+
+
+# define RandomForest classifier to be used in Boruta
+# (use RF classifier to calculate the features' importance by Gini impurity)
+
+### KNN_feat_selector = BorutaPy(KNN_feature_sel_model, n_estimators=200, max_iter=100, perc=90, verbose =2, random_state=42 )
+### 39+3
+
+
+from sklearn.ensemble import RandomForestClassifier
+
+KNN_feature_sel_model = RandomForestClassifier(n_estimators=100, random_state=42) # for Boruta # 100 trees
+
+
+# define Boruta feature selection method
+from boruta import BorutaPy
+
+KNN_feat_selector = BorutaPy(KNN_feature_sel_model, n_estimators=200, max_iter=100, perc=95, verbose =2, random_state=42 )
+# n_estimators : tree's number , max_iter = maximum iteration time, perc : % of including tentative to confirmed , verbose : level of detailed output during execution
+
+
+# Fit the Boruta method to your training data- find all relevant features
+KNN_feat_selector.fit(KNN_X, KNN_Y)
+
+
+# check selected features
+print(KNN_feat_selector.support_) # should we accept the feature?
+
+KNN_feat_selector = KNN_X[:, KNN_feat_selector.support_] # 24+3 features been seen as important(Confirmed:39,Tentative:3)
+
+KNN_confirmed_feature_names = feature_names[KNN_feat_selector.support_]
+print(KNN_confirmed_feature_names)
+#['feature7' 'feature16' 'feature51' 'feature59' 'feature63' 'feature64'
+#'feature65' 'feature103' 'feature120' 'feature132' 'feature152'
+#'feature153' 'feature156' 'feature170' 'feature267' 'feature355'
+#'feature425' 'feature426' 'feature441' 'feature477' 'feature523'
+#'feature539' 'feature562' 'feature574']
+
+
+# check ranking of features
+print(KNN_feat_selector.ranking_) # rank 1 is the best 
+
+KNN_tentative_feature_names = feature_names[KNN_feat_selector.support_weak_]
+print(KNN_tentative_feature_names)
+#['feature25' 'feature205' 'feature341']
+
+
+
+# call transform() on X to filter it down to selected features
+KNN_X_filtered = np.concatenate((KNN_feat_selector.transform(KNN_X), KNN_X[:, KNN_feat_selector.support_weak_]), axis=1)
+KNN_X_filtered_df = pd.DataFrame(KNN_X_filtered)
+KNN_X_filtered_df.shape #(1253, 27)
+
+
+# join target value(y) back
+KNN_Y_df = pd.DataFrame(KNN_Y, columns=["Pass/Fail"])
+KNN_Y_df.shape #(1253, 1)
+
+KNN_XY_filtered = pd.concat([KNN_X_filtered_df,KNN_Y_df], axis=1)
+
+
+### overview of all remaining variable
+                         
+summary_KNN_df = pd.DataFrame({
+    'max': KNN_X_filtered_df.max(),
+    'min': KNN_X_filtered_df.min(),
+    'mean': KNN_X_filtered_df.mean(),
+    'Q1': KNN_X_filtered_df.quantile(0.25),
+    'Q2': KNN_X_filtered_df.quantile(0.50),
+    'Q3': KNN_X_filtered_df.quantile(0.75),
+    'standard deviation': KNN_X_filtered_df.std(),
+    'Variance': KNN_X_filtered_df.var(),
+    'total_NA': KNN_X_filtered_df.isna().sum()
+    })
+
+
+
+### Modeling- data balancing (by the result from "KNN - Boruta")
+
+# Recap- Get the distribution of 'result' in training set
+# train_result_counts = train_set['Pass/Fail'].value_counts(normalize=True)* 100
+# print(train_result_counts)
+
+#-1    93.375898 (Pass)
+# 1     6.624102 (Fail)
+
+
+### Method 1: ROSE (Random Over Sampling)
+# console- pip install imbalanced-learn
+from imblearn.over_sampling import RandomOverSampler
+
+# define x & y
+Rose_X = KNN_XY_filtered.drop('Pass/Fail',axis=1)
+Rose_Y = KNN_XY_filtered['Pass/Fail']
+
+# define desired sampling strategy / parameters
+rose = RandomOverSampler(sampling_strategy='auto', random_state = 11)
+
+# fit
+Rose_resam_X, Rose_resam_Y = rose.fit_resample(Rose_X, Rose_Y)
+
+# Join X and y to see the Pass/Fail ratio in the balanced dataset
+Rose_XY = pd.concat([Rose_resam_X,Rose_resam_Y], axis=1)
+Rose_XY_ratio = Rose_XY['Pass/Fail'].value_counts(normalize=True)* 100
+print(Rose_XY_ratio)
+# 0 : 50.0  (Pass)
+# 1 : 50.0  (Fail)
+
+
+### Method 2: SMOTE
+
+from imblearn.over_sampling import SMOTE
+
+# define X & Y
+SMO_X = KNN_XY_filtered.drop('Pass/Fail', axis=1)
+SMO_Y = KNN_XY_filtered['Pass/Fail']
+
+# define desired sampling strategy / parameters
+smote = SMOTE(sampling_strategy='auto', random_state = 11)
+
+# fit
+Smo_resam_X, Smo_resam_Y = smote.fit_resample(SMO_X, SMO_Y)
+
+# Join X and y to see the Pass/Fail ratio in the balanced dataset
+Smote_XY = pd.concat([Smo_resam_X,Smo_resam_Y], axis=1)
+Smote_XY_ratio = Smote_XY['Pass/Fail'].value_counts(normalize=True)* 100
+print(Smote_XY_ratio)
+# 0 : 50.0  (Pass)
+# 1 : 50.0  (Fail)
+
+
+
+### Method 3: ADASYN (avoid new datapoints linear correlate to each other)
+
+from imblearn.over_sampling import ADASYN
+
+# define X & Y
+AD_X = KNN_XY_filtered.drop('Pass/Fail', axis=1)
+AD_Y = KNN_XY_filtered['Pass/Fail']
+
+# define desired sampling strategy / parameters
+adasyn = ADASYN(sampling_strategy='auto', random_state = 11)
+
+# fit
+AD_resam_X, AD_resam_Y = adasyn.fit_resample(AD_X, AD_Y)
+
+# Join X and y to see the Pass/Fail ratio in the balanced dataset
+AD_XY = pd.concat([AD_resam_X,AD_resam_Y], axis=1)
+AD_XY_ratio = AD_XY['Pass/Fail'].value_counts(normalize=True)* 100
+print(AD_XY_ratio)
+# 0 : 49.89339  (Pass)
+# 1 : 50.10661  (Fail)
+
+########################################################################
+
+### Modeling (by the result from "KNN - Boruta - ROSE") # 27 features left
+
+## Preprocess test set
+print(test_set.shape) # (314, 592)
+
+
+### calculate summary statistics for each column
+test_summary_data= test_set.iloc[:,:-2]
+test_summary_df= pd.concat([test_summary_data.mean().rename("mean"),
+                       test_summary_data.std().rename("standard deviation"),
+                       test_summary_data.var().rename("Variance"),
+                       test_summary_data.isna().sum().rename("total_NA"),
+                       (test_summary_data.isna().sum()/test_summary_data.count()).rename("%_NA")],axis=1)
+
+
+
+## push back outliers to 3S boundaries
+# recap- train_outliers= ((train_summary_data > (train_mean + 3*train_std)) | (train_summary_data < (train_mean - 3*train_std))).sum()/ len(train_summary_data)
+
+test_sub_outlier = test_summary_data.copy()
+
+test_mean = test_summary_df["mean"]
+test_std = test_summary_df["standard deviation"]
+
+test_right_boundary = test_mean + 3*test_std
+test_left_boundary = test_mean - 3*test_std
+
+test_sub_outlier = test_sub_outlier.where(test_sub_outlier <= test_right_boundary, other=test_right_boundary, axis=0) 
+test_sub_outlier = test_sub_outlier.where(test_sub_outlier >= test_left_boundary, other=test_left_boundary, axis=0)
+# match the condition-> remain, other -> substitue # axis=0 : by row
+
+
+
+
+## drop the features which have less than 50% of non_NA -> more than 50% NA
+
+## NA by columns
+test_na_column_percentage = test_summary_data.isna().sum() /len(test_summary_data)
+
+print(test_na_column_percentage.describe()) # min=0, max=0.933121
+
+
+# list the features which na > 0.5
+threshold = 0.5
+test_high_na_cols = test_na_column_percentage[test_na_column_percentage > threshold].index
+
+
+# drop NA ( > 50% )
+test_outlier_NA = test_sub_outlier.copy()
+print(test_outlier_NA.shape) #(314, 590)
+print(len(test_high_na_cols)) # 28
+test_outlier_NA = test_outlier_NA.drop(columns=high_na_cols)
+test_outlier_NA.shape #(314, 566)
+
+
+
+
+### Don't have to drop constant features in test set, since they will be filtered in the model fitting process
+
+
+
+## KNN Imputation
+test_KNN_imputed_df = test_outlier_NA.copy()
+test_KNN_imputed_df.isnull().any().sum() #439
+
+# "temporary scaling" to make sure distance between features are comparable
+# from sklearn.preprocessing import StandardScaler
+KNN_scaler = StandardScaler()
+test_KNN_imputed_df = KNN_scaler.fit_transform(test_KNN_imputed_df)
+
+
+# impute
+# from sklearn.impute import KNNImputer
+test_KNN_imp = KNNImputer(n_neighbors=5)
+test_KNN_imputed_df = test_KNN_imp.fit_transform(test_KNN_imputed_df)
+test_KNN_imputed_df = pd.DataFrame(test_KNN_imputed_df, columns=test_outlier_NA.columns)
+
+
+# reverse to original scale
+test_KNN_imputed_df = KNN_scaler.inverse_transform(test_KNN_imputed_df)
+test_KNN_imputed_df = pd.DataFrame(test_KNN_imputed_df, columns=test_outlier_NA.columns)
+test_KNN_imputed_df.isnull().any().sum() #0
+
+
+#################################################################################
+
+### Modeling- Random Forest 
+# (training set - by the result from "KNN - Boruta - ROSE")
+# (test set - by the result from "KNN - Boruta" )
+
+
+# from sklearn.ensemble import RandomForestClassifier (already imported before)
+
+# define X_train & y_train
+RF_X_train = AD_resam_X
+RF_y_train = AD_resam_Y
+
+# Create RandomForestClassifier:
+RF_model = RandomForestClassifier()
+
+# fit RF model
+RF_model.fit(RF_X_train, RF_y_train)
+
+# define X_test
+# select the features by the result we have done on training select
+test_KNN_imputed_df.shape # (314, 566)
+
+test_KNN_imputed_Csel = test_KNN_imputed_df[KNN_confirmed_feature_names].copy()
+test_KNN_imputed_Csel.shape # (314, 24)
+
+test_KNN_imputed_Tsel = test_KNN_imputed_df[KNN_tentative_feature_names].copy()
+test_KNN_imputed_Tsel.shape # (314, 24)
+
+test_KNN_imputed_Fsel = pd.concat([test_KNN_imputed_Csel,test_KNN_imputed_Tsel], axis=1)
+test_KNN_imputed_Fsel.shape # (314, 27)
+
+RF_X_test = test_KNN_imputed_Fsel
+
+# make prediction
+y_pred = RF_model.predict(RF_X_test)
